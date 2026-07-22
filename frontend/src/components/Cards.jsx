@@ -1,0 +1,41 @@
+import React from 'react';
+
+export const FeatureCard = ({ icon, title, description }) => {
+  return (
+    <div className="bg-white rounded-2xl p-8 shadow-sm hover:shadow-md transition-shadow border border-gray-100 flex flex-col items-center text-center group">
+      <div className="bg-brand-earth/20 p-4 rounded-full mb-6 group-hover:scale-110 transition-transform duration-300">
+        <div className="text-brand-green">
+          {icon}
+        </div>
+      </div>
+      <h3 className="text-xl font-bold text-gray-900 mb-3">{title}</h3>
+      <p className="text-gray-600 leading-relaxed">{description}</p>
+    </div>
+  );
+};
+
+export const OrganicItemCard = ({ category, title, description, user, timePosted }) => {
+  return (
+    <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow flex flex-col h-full">
+      <div className="flex justify-between items-start mb-4">
+        <span className="bg-brand-lightGreen/10 text-brand-green px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider">
+          {category}
+        </span>
+        <span className="text-xs text-gray-400">{timePosted}</span>
+      </div>
+      <h4 className="text-lg font-bold text-gray-900 mb-2">{title}</h4>
+      <p className="text-gray-600 text-sm mb-6 flex-grow">{description}</p>
+      <div className="flex items-center justify-between border-t border-gray-100 pt-4 mt-auto">
+        <div className="flex items-center space-x-2">
+          <div className="h-8 w-8 rounded-full bg-brand-darkBlue flex items-center justify-center text-white text-xs font-bold">
+            {user.charAt(0)}
+          </div>
+          <span className="text-sm font-medium text-gray-700">{user}</span>
+        </div>
+        <button className="text-brand-green font-medium text-sm hover:underline">
+          Request
+        </button>
+      </div>
+    </div>
+  );
+};
