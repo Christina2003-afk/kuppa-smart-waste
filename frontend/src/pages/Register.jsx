@@ -32,8 +32,10 @@ const Register = () => {
         }
         break;
       case 'phone':
-        if (value && !/^\d{10}$/.test(value)) {
-          err = 'Phone number must be exactly 10 digits';
+        if (value && !/^[6-9]\d{9}$/.test(value)) {
+          err = 'Phone number must be 10 digits and start with 6, 7, 8, or 9';
+        } else if (value && /^(\d)\1{9}$/.test(value)) {
+          err = 'Phone number cannot be all identical digits';
         }
         break;
       case 'email':

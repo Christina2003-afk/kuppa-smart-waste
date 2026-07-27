@@ -25,6 +25,14 @@ const registerUser = async (req, res) => {
       return res.status(400).json({ message: 'Please add all required fields' });
     }
 
+    if (!/^[6-9]\d{9}$/.test(phone)) {
+      return res.status(400).json({ message: 'Phone number must be 10 digits and start with 6, 7, 8, or 9' });
+    }
+    
+    if (/^(\d)\1{9}$/.test(phone)) {
+      return res.status(400).json({ message: 'Phone number cannot be all identical digits' });
+    }
+
     // Check if user exists
     const userExists = await User.findOne({ email });
 
@@ -54,6 +62,10 @@ const registerUser = async (req, res) => {
         phone: user.phone,
         address: user.address,
         role: user.role,
+        walletBalance: user.walletBalance,
+        transactions: user.transactions,
+        totalDisposals: user.totalDisposals,
+        ecoPoints: user.ecoPoints,
         token: generateToken(user._id),
       });
     } else {
@@ -80,7 +92,12 @@ const loginUser = async (req, res) => {
         name: user.name,
         email: user.email,
         phone: user.phone,
+        address: user.address,
         role: user.role,
+        walletBalance: user.walletBalance,
+        transactions: user.transactions,
+        totalDisposals: user.totalDisposals,
+        ecoPoints: user.ecoPoints,
         token: generateToken(user._id),
       });
     } else {
@@ -144,6 +161,10 @@ const googleAuth = async (req, res) => {
       phone: user.phone,
       address: user.address,
       role: user.role,
+      walletBalance: user.walletBalance,
+      transactions: user.transactions,
+      totalDisposals: user.totalDisposals,
+      ecoPoints: user.ecoPoints,
       token: generateToken(user._id),
     });
   } catch (error) {
@@ -152,9 +173,80 @@ const googleAuth = async (req, res) => {
   }
 };
 
+const sendEmail = require('../utils/sendEmail');
+
+// @desc    Forgot Password (Send Real Email)
+// @route   POST /api/auth/forgot-password
+// @access  Public
+const forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ message: 'Please provide an email' });
+    }
+
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      // Security best practice: Don't reveal if email exists or not
+      return res.status(200).json({ message: 'Password reset instructions have been sent to your email!' });
+    }
+
+    // Generate a random 6-digit temporary password
+    const tempPassword = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // Hash it and save
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(tempPassword, salt);
+    user.password = hashedPassword;
+    await user.save();
+
+    // Create a beautiful HTML email
+    const message = `You are receiving this email because you requested a password reset for your KuPPA account. Your temporary password is: ${tempPassword}`;
+    
+    const htmlMessage = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
+        <h2 style="color: #2e7d32;">KuPPA Account Recovery</h2>
+        <p>Hello <strong>${user.name}</strong>,</p>
+        <p>You requested a password reset for your account associated with this email.</p>
+        <p>Your temporary password is:</p>
+        <div style="background-color: #f5f5f5; padding: 15px; border-radius: 5px; text-align: center; margin: 20px 0;">
+          <h1 style="letter-spacing: 5px; color: #333; margin: 0;">${tempPassword}</h1>
+        </div>
+        <p>Please log in using this temporary password and change it immediately from your dashboard settings.</p>
+        <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 30px 0;">
+        <p style="font-size: 12px; color: #888; text-align: center;">If you did not request a password reset, please ignore this email or contact support.</p>
+      </div>
+    `;
+
+    try {
+      const previewUrl = await sendEmail({
+        email: user.email,
+        subject: 'KuPPA - Password Reset',
+        message,
+        html: htmlMessage
+      });
+
+      res.status(200).json({ 
+        message: 'Password reset instructions have been sent to your email!',
+        previewUrl: previewUrl
+      });
+    } catch (err) {
+      console.error('Email sending failed:', err);
+      return res.status(500).json({ message: 'Error sending email. Please try again.' });
+    }
+
+  } catch (error) {
+    console.error('Forgot Password Error:', error);
+    res.status(500).json({ message: 'Server Error: Could not process request' });
+  }
+};
+
 module.exports = {
   registerUser,
   loginUser,
   getProfile,
   googleAuth,
+  forgotPassword,
 };

@@ -70,8 +70,19 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   };
 
+  const forgotPassword = async (email) => {
+    setError(null);
+    try {
+      const res = await api.post('/auth/forgot-password', { email });
+      return res.data;
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to process request');
+      throw err;
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, loading, error, login, register, googleLogin, logout }}>
+    <AuthContext.Provider value={{ user, setUser, loading, error, login, register, googleLogin, logout, forgotPassword }}>
       {children}
     </AuthContext.Provider>
   );

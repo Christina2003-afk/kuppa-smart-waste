@@ -9,10 +9,42 @@ const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [localError, setLocalError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+  const [previewUrl, setPreviewUrl] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isForgotPassword, setIsForgotPassword] = useState(false);
   
-  const { login, googleLogin, error } = useContext(AuthContext);
+  const { login, googleLogin, forgotPassword, error } = useContext(AuthContext);
   const navigate = useNavigate();
+
+  const handleForgotPassword = async (e) => {
+    e.preventDefault();
+    setLocalError('');
+    setSuccessMessage('');
+    setPreviewUrl('');
+
+    if (!email) {
+      setLocalError('Please enter your email address');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const res = await forgotPassword(email);
+      setSuccessMessage(res.message);
+      if (res.previewUrl) {
+        setPreviewUrl(res.previewUrl);
+      }
+      // Automatically switch back to login mode so they can enter the temporary password
+      setTimeout(() => {
+        setIsForgotPassword(false);
+      }, 1500);
+    } catch (err) {
+      setLocalError(err.message || 'Failed to send reset link');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -86,12 +118,29 @@ const Login = () => {
           {/* Animated top gradient line */}
           <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-brand-green via-[#ffc107] to-brand-green bg-[length:200%_auto] animate-gradient"></div>
           
-          <form className="space-y-6" onSubmit={handleSubmit}>
+          <form className="space-y-6" onSubmit={isForgotPassword ? handleForgotPassword : handleSubmit} autoComplete="off">
             
             {(error || localError) && (
               <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="bg-red-50 border-l-4 border-red-500 p-4 rounded-xl flex items-center space-x-3">
                 <AlertCircle className="h-5 w-5 text-red-500" />
                 <p className="text-sm text-red-700 font-medium">{error || localError}</p>
+              </motion.div>
+            )}
+
+            {successMessage && (
+              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="bg-green-50 border-l-4 border-brand-green p-4 rounded-xl flex flex-col space-y-2">
+                <div className="flex items-start space-x-3">
+                  <Leaf className="h-5 w-5 text-brand-green flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-green-800 font-medium">{successMessage}</p>
+                </div>
+                {previewUrl && (
+                  <div className="ml-8 mt-2 p-3 bg-white rounded-lg border border-green-200 shadow-sm">
+                    <p className="text-xs text-green-700 font-bold mb-1">🔧 Developer Test Mode:</p>
+                    <a href={previewUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline flex items-center space-x-1 break-all">
+                      <span>Click here to view the sent email (Ethereal Email)</span>
+                    </a>
+                  </div>
+                )}
               </motion.div>
             )}
 
@@ -107,7 +156,7 @@ const Login = () => {
                   id="email"
                   name="email"
                   type="email"
-                  autoComplete="email"
+                  autoComplete="off"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -117,32 +166,34 @@ const Login = () => {
               </div>
             </div>
 
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label htmlFor="password" className="block text-sm font-semibold text-gray-700">
-                  Password
-                </label>
-                <a href="#" className="text-sm font-medium text-brand-green hover:text-brand-darkBlue transition-colors">
-                  Forgot password?
-                </a>
-              </div>
-              <div className="relative rounded-xl shadow-sm group-hover:shadow-md transition-shadow duration-300">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                  <Lock className="h-5 w-5 text-gray-400 group-focus-within:text-brand-green transition-colors" />
+            {!isForgotPassword && (
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label htmlFor="password" className="block text-sm font-semibold text-gray-700">
+                    Password
+                  </label>
+                  <button type="button" onClick={() => { setIsForgotPassword(true); setLocalError(''); setSuccessMessage(''); }} className="text-sm font-medium text-brand-green hover:text-brand-darkBlue transition-colors">
+                    Forgot password?
+                  </button>
                 </div>
-                <input
-                  id="password"
-                  name="password"
-                  type="password"
-                  autoComplete="current-password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="block w-full pl-11 pr-4 py-3.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-green focus:border-transparent transition-all sm:text-sm bg-gray-50 hover:bg-white focus:bg-white"
-                  placeholder="••••••••"
-                />
+                <div className="relative rounded-xl shadow-sm group-hover:shadow-md transition-shadow duration-300">
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                    <Lock className="h-5 w-5 text-gray-400 group-focus-within:text-brand-green transition-colors" />
+                  </div>
+                  <input
+                    id="password"
+                    name="password"
+                    type="password"
+                    autoComplete="new-password"
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="block w-full pl-11 pr-4 py-3.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-green focus:border-transparent transition-all sm:text-sm bg-gray-50 hover:bg-white focus:bg-white"
+                    placeholder="••••••••"
+                  />
+                </div>
               </div>
-            </div>
+            )}
 
             <div className="pt-2">
               <button
@@ -150,46 +201,56 @@ const Login = () => {
                 disabled={isSubmitting}
                 className={`w-full flex justify-center items-center space-x-2 py-4 px-4 border border-transparent rounded-xl shadow-lg text-sm font-bold text-white bg-brand-green hover:bg-[#235e26] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-green transition-all transform hover:-translate-y-1 ${isSubmitting ? 'opacity-75 cursor-not-allowed transform-none' : ''}`}
               >
-                <span>{isSubmitting ? 'Authenticating...' : 'Sign In'}</span>
+                <span>{isSubmitting ? 'Processing...' : (isForgotPassword ? 'Reset Password' : 'Sign In')}</span>
                 {!isSubmitting && <ArrowRight className="h-4 w-4" />}
               </button>
             </div>
             
-            <div className="mt-8">
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-gray-200" />
-                </div>
-                <div className="relative flex justify-center text-sm">
-                  <span className="px-4 bg-white text-gray-500 font-medium">Or continue with</span>
-                </div>
+            {isForgotPassword && (
+              <div className="text-center mt-4">
+                <button type="button" onClick={() => { setIsForgotPassword(false); setSuccessMessage(''); setLocalError(''); }} className="text-sm font-medium text-gray-500 hover:text-brand-green transition-colors">
+                  Back to Login
+                </button>
               </div>
+            )}
+            
+            {!isForgotPassword && (
+              <div className="mt-8">
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-gray-200" />
+                  </div>
+                  <div className="relative flex justify-center text-sm">
+                    <span className="px-4 bg-white text-gray-500 font-medium">Or continue with</span>
+                  </div>
+                </div>
 
-              <div className="mt-6 flex justify-center transform transition-transform hover:scale-105">
-                <GoogleLogin
-                  onSuccess={async (credentialResponse) => {
-                    try {
-                      const res = await googleLogin(credentialResponse.credential);
-                      if (res.role === 'Admin') {
-                        navigate('/admin');
-                      } else if (res.role === 'Staff') {
-                        navigate('/staff');
-                      } else {
-                        navigate('/');
+                <div className="mt-6 flex justify-center transform transition-transform hover:scale-105">
+                  <GoogleLogin
+                    onSuccess={async (credentialResponse) => {
+                      try {
+                        const res = await googleLogin(credentialResponse.credential);
+                        if (res.role === 'Admin') {
+                          navigate('/admin');
+                        } else if (res.role === 'Staff') {
+                          navigate('/staff');
+                        } else {
+                          navigate('/');
+                        }
+                      } catch (err) {
+                        setLocalError('Google Sign-In failed');
                       }
-                    } catch (err) {
-                      setLocalError('Google Sign-In failed');
-                    }
-                  }}
-                  onError={() => {
-                    setLocalError('Google Sign-In Failed');
-                  }}
-                  shape="pill"
-                  theme="outline"
-                  size="large"
-                />
+                    }}
+                    onError={() => {
+                      setLocalError('Google Sign-In Failed');
+                    }}
+                    shape="pill"
+                    theme="outline"
+                    size="large"
+                  />
+                </div>
               </div>
-            </div>
+            )}
           </form>
         </div>
       </motion.div>
