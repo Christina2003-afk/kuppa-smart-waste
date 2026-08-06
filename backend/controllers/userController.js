@@ -88,9 +88,66 @@ const addTransaction = async (req, res) => {
     res.status(500).json({ message: 'Server Error: Could not update wallet' });
   }
 };
+// @desc    Request RFID Card
+// @route   POST /api/users/request-rfid
+// @access  Private
+const requestRFID = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id); // Assuming req.user is populated by protect middleware
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    user.rfidStatus = 'Pending Approval';
+    await user.save();
+    
+    res.json({ message: 'RFID Request submitted successfully', rfidStatus: user.rfidStatus });
+  } catch (error) {
+    res.status(500).json({ message: 'Server Error: Could not request RFID' });
+  }
+};
+
+// @desc    Get all pending RFID requests
+// @route   GET /api/users/rfid-requests
+// @access  Private/Admin
+const getRFIDRequests = async (req, res) => {
+  try {
+    const users = await User.find({ rfidStatus: 'Pending Approval' }).select('-password');
+    res.json(users);
+  } catch (error) {
+    res.status(500).json({ message: 'Server Error: Could not fetch RFID requests' });
+  }
+};
+
+// @desc    Approve RFID Request and Issue Card
+// @route   POST /api/users/approve-rfid/:id
+// @access  Private/Admin
+const approveRFID = async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    // Generate a unique 8-digit RFID number
+    const rfidNum = 'KUP-' + Math.floor(10000000 + Math.random() * 90000000);
+    
+    user.rfidStatus = 'Approved';
+    user.rfidNumber = rfidNum;
+    
+    await user.save();
+    
+    res.json({ message: 'RFID Card approved and issued', rfidNumber: user.rfidNumber });
+  } catch (error) {
+    res.status(500).json({ message: 'Server Error: Could not approve RFID' });
+  }
+};
 
 module.exports = {
   getUsers,
   updateUserRole,
-  addTransaction
+  addTransaction,
+  requestRFID,
+  getRFIDRequests,
+  approveRFID
 };

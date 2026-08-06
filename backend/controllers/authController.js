@@ -66,6 +66,8 @@ const registerUser = async (req, res) => {
         transactions: user.transactions,
         totalDisposals: user.totalDisposals,
         ecoPoints: user.ecoPoints,
+        rfidStatus: user.rfidStatus,
+        rfidNumber: user.rfidNumber,
         token: generateToken(user._id),
       });
     } else {
@@ -98,6 +100,8 @@ const loginUser = async (req, res) => {
         transactions: user.transactions,
         totalDisposals: user.totalDisposals,
         ecoPoints: user.ecoPoints,
+        rfidStatus: user.rfidStatus,
+        rfidNumber: user.rfidNumber,
         token: generateToken(user._id),
       });
     } else {

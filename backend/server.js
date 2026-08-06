@@ -6,6 +6,8 @@ const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
 const binRoutes = require('./routes/binRoutes');
 const exchangeRoutes = require('./routes/exchangeRoutes');
+const uploadRoutes = require('./routes/uploadRoutes');
+const path = require('path');
 
 dotenv.config();
 
@@ -18,11 +20,17 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
+// Make the uploads folder publicly accessible
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/bins', binRoutes);
 app.use('/api/exchange', exchangeRoutes);
+app.use('/api/upload', uploadRoutes);
+app.use('/api/wallet', require('./routes/walletRoutes'));
+app.use('/api/reports', require('./routes/reportRoutes'));
 
 // Base route
 app.get('/', (req, res) => {

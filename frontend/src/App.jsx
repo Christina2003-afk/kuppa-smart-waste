@@ -19,11 +19,11 @@ import { AuthProvider } from './context/AuthContext';
 
 const AppLayout = () => {
   const location = useLocation();
-  const isAdminRoute = location.pathname.startsWith('/admin');
+  const isDashboardRoute = location.pathname.startsWith('/admin') || location.pathname.startsWith('/staff');
 
   return (
     <div className="flex flex-col min-h-screen">
-      {!isAdminRoute && <Navbar />}
+      {!isDashboardRoute && <Navbar />}
       <main className="flex-grow">
         <Routes>
           <Route path="/" element={<Home />} />
@@ -52,7 +52,7 @@ const AppLayout = () => {
           </Route>
         </Routes>
       </main>
-      {!isAdminRoute && <Footer />}
+      {!isDashboardRoute && <Footer />}
     </div>
   );
 };

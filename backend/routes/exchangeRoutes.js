@@ -1,13 +1,12 @@
 const express = require('express');
 const router = express.Router();
-const { getItems, createItem, acceptItem } = require('../controllers/exchangeController');
+const { getItems, createItem, acceptItem, updateStatus, approveFulfillment } = require('../controllers/exchangeController');
 const { protect } = require('../middleware/authMiddleware');
 
-router.route('/')
-  .get(getItems)
-  .post(protect, createItem);
-
-router.route('/:id/accept')
-  .put(protect, acceptItem);
+router.get('/', getItems);
+router.post('/', protect, createItem);
+router.put('/:id/accept', protect, acceptItem);
+router.put('/:id/approve-fulfillment', protect, approveFulfillment);
+router.put('/:id/status', protect, updateStatus);
 
 module.exports = router;

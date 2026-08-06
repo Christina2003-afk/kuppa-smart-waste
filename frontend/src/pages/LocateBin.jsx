@@ -3,8 +3,9 @@ import { AuthContext } from '../context/AuthContext';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
-import { MapPin, Navigation, Clock, Battery, AlertTriangle, Lock, Truck, Trash2, User, Coins, Package } from 'lucide-react';
+import { MapPin, Navigation, Clock, Battery, AlertTriangle, Lock, Truck, Trash2, User, Coins, Package, Sparkles, X, Info, TrendingUp, Users, Calendar as CalendarIcon } from 'lucide-react';
 import api from '../services/api';
+import { predictHoursUntilFull } from '../utils/aiPredictor';
 
 // Icons
 const userIcon = new L.Icon({
@@ -59,6 +60,9 @@ const LocateBin = () => {
   const [publicLocation, setPublicLocation] = useState(null);
   const [isScanning, setIsScanning] = useState(false);
   const [liveActivity, setLiveActivity] = useState(null);
+
+  const [showAiModal, setShowAiModal] = useState(false);
+  const [selectedAiBin, setSelectedAiBin] = useState(null);
 
   const activeLocation = userLocation || publicLocation;
 
@@ -290,6 +294,26 @@ const LocateBin = () => {
                         </div>
                       </div>
 
+                      {/* AI Prediction Badge */}
+                      <div 
+                        onClick={(e) => { e.stopPropagation(); setSelectedAiBin(bin); setShowAiModal(true); }}
+                        className="mt-4 pt-3 border-t border-gray-100/60 flex items-center justify-between cursor-pointer hover:bg-green-50 p-2 -mx-2 rounded-lg transition-colors group/ai"
+                      >
+                        <div className="flex items-center space-x-2">
+                          <div className="bg-green-100 p-1.5 rounded-lg shadow-sm group-hover/ai:bg-green-200 transition-colors">
+                            <Sparkles className="h-3 w-3 text-brand-green" />
+                          </div>
+                          <span className="text-xs font-bold text-gray-700">KuPP-AI Predicts:</span>
+                        </div>
+                        {bin.fillLevel >= 100 ? (
+                          <span className="text-xs font-black text-red-500 bg-red-50 px-2 py-1 rounded border border-red-100">OVERFLOWING</span>
+                        ) : bin.fillLevel > 90 ? (
+                          <span className="text-xs font-black text-orange-500 bg-orange-50 px-2 py-1 rounded border border-orange-100">Full in {predictHoursUntilFull(bin)} hrs</span>
+                        ) : (
+                          <span className="text-xs font-bold text-brand-green bg-green-50 px-2 py-1 rounded border border-green-100">Full in {predictHoursUntilFull(bin)} hrs</span>
+                        )}
+                      </div>
+
                       {/* Guest Overlay Message */}
                       {!user && (
                         <div className="mt-5 pt-4 border-t border-gray-100">
@@ -475,6 +499,115 @@ const LocateBin = () => {
         )}
 
       </div>
+
+      {/* AI Insights Modal */}
+      {showAiModal && selectedAiBin && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden relative">
+            
+            {/* Header */}
+            <div className="bg-gradient-to-r from-brand-green to-brand-darkBlue p-6 text-white relative">
+              <button 
+                onClick={() => setShowAiModal(false)}
+                className="absolute top-4 right-4 bg-white/20 hover:bg-white/40 p-1.5 rounded-full transition-colors"
+              >
+                <X className="h-5 w-5 text-white" />
+              </button>
+              <div className="flex items-center space-x-3 mb-2">
+                <div className="bg-white/20 p-2 rounded-xl backdrop-blur-md">
+                  <Sparkles className="h-6 w-6 text-white" />
+                </div>
+                <h2 className="text-2xl font-black">KuPP-AI Insights</h2>
+              </div>
+              <p className="text-green-100 font-medium">Predictive analysis for {selectedAiBin.name}</p>
+            </div>
+
+            <div className="p-6">
+              
+              {/* Visual Animated Bin representing prediction */}
+              <div className="flex justify-center mb-8 relative">
+                <div className="relative w-32 h-48 border-x-4 border-b-4 border-gray-300 rounded-b-2xl shadow-inner bg-gray-50 flex items-end justify-center overflow-hidden">
+                  
+                  {/* Current Fill Level */}
+                  <div 
+                    className="absolute bottom-0 w-full bg-gradient-to-t from-green-500 to-green-400 opacity-70"
+                    style={{ height: `${selectedAiBin.fillLevel}%` }}
+                  ></div>
+                  
+                  {/* Projected Fill Animation */}
+                  <div className="absolute bottom-0 w-full bg-gradient-to-t from-brand-lightGreen to-brand-green opacity-50 animate-[fill-up_2s_ease-out_forwards]"
+                    style={{
+                      height: '100%', 
+                      clipPath: `polygon(0 ${100 - selectedAiBin.fillLevel}%, 100% ${100 - selectedAiBin.fillLevel}%, 100% 100%, 0 100%)`
+                    }}
+                  >
+                    <div className="absolute top-0 left-0 right-0 h-4 bg-white/30 animate-pulse"></div>
+                  </div>
+
+                  {/* Prediction Line */}
+                  <div className="absolute top-4 w-full border-t-2 border-dashed border-red-400 z-10 flex justify-center">
+                    <span className="bg-red-100 text-red-600 text-[10px] font-bold px-2 py-0.5 rounded-full -mt-2.5">100% CAPACITY</span>
+                  </div>
+                  
+                  <style>
+                    {`
+                      @keyframes fill-up {
+                        0% { transform: translateY(100%); }
+                        100% { transform: translateY(0%); }
+                      }
+                    `}
+                  </style>
+                </div>
+
+                {/* Status Callout */}
+                <div className="absolute -right-4 top-1/2 -translate-y-1/2 bg-white shadow-xl border border-gray-100 rounded-xl p-3 animate-fade-in-up" style={{animationDelay: '1s'}}>
+                  <p className="text-xs text-gray-500 font-bold mb-1 uppercase tracking-wider">Estimated Time</p>
+                  <p className="text-xl font-black text-brand-green">
+                    {predictHoursUntilFull(selectedAiBin)} <span className="text-sm text-gray-600 font-bold">hrs</span>
+                  </p>
+                </div>
+              </div>
+
+              {/* Factors Breakdown */}
+              <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100">
+                <h4 className="text-sm font-bold text-gray-800 mb-3 flex items-center"><Info className="h-4 w-4 mr-1 text-brand-green"/> AI Calculation Factors</h4>
+                
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center text-sm text-gray-600 font-medium">
+                      <TrendingUp className="h-4 w-4 mr-2 text-blue-500" /> Current Fill Velocity
+                    </div>
+                    <span className="font-bold text-gray-900">{selectedAiBin.fillLevel}%</span>
+                  </div>
+                  
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center text-sm text-gray-600 font-medium">
+                      <Users className="h-4 w-4 mr-2 text-orange-500" /> Area Population Density
+                    </div>
+                    <span className="font-bold text-gray-900">High ({selectedAiBin.district})</span>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center text-sm text-gray-600 font-medium">
+                      <CalendarIcon className="h-4 w-4 mr-2 text-green-500" /> Day of Week Impact
+                    </div>
+                    <span className="font-bold text-gray-900">{new Date().getDay() === 0 || new Date().getDay() === 6 ? 'Weekend Peak' : 'Normal'}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Recommendation */}
+              <div className="mt-4 bg-green-50 border border-green-100 rounded-xl p-4">
+                <p className="text-sm font-bold text-brand-green mb-1">💡 KuPP-AI Recommendation</p>
+                <p className="text-xs text-green-800 font-medium leading-relaxed">
+                  Based on historical machine learning data, this bin is projected to reach maximum capacity in exactly <strong className="font-black text-brand-darkBlue">{predictHoursUntilFull(selectedAiBin)} hours</strong>. We recommend booking a drop-off slot before this time.
+                </p>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

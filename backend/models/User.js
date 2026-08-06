@@ -26,6 +26,15 @@ const userSchema = new mongoose.Schema({
     type: String,
     default: 'User'
   },
+  rfidStatus: {
+    type: String,
+    enum: ['Not Requested', 'Pending Approval', 'Approved', 'Rejected'],
+    default: 'Not Requested'
+  },
+  rfidNumber: {
+    type: String,
+    default: null
+  },
   walletBalance: {
     type: Number,
     default: 500
@@ -41,7 +50,7 @@ const userSchema = new mongoose.Schema({
   transactions: [{
     type: {
       type: String,
-      enum: ['recharge', 'disposal', 'booking'],
+      enum: ['recharge', 'disposal', 'booking', 'exchange_payment', 'exchange_earning'],
       required: true
     },
     amount: {
