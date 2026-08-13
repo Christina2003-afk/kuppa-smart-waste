@@ -18,6 +18,7 @@ const createReport = async (req, res) => {
       description,
       photoUrl,
       status: 'Pending',
+      reportedBy: req.user ? req.user._id : undefined,
     });
 
     res.status(201).json(report);

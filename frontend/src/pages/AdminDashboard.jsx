@@ -1,6 +1,6 @@
 import React, { useContext, useState, useEffect, useMemo } from 'react';
 import { AuthContext } from '../context/AuthContext';
-import { Users, Trash2, Activity, UserCog, Check, X, Map as MapIcon, Navigation, Leaf, Search, Bell, Menu, ChevronDown, CreditCard, TrendingUp, DollarSign, Filter, MoreVertical, LogOut, LayoutDashboard, Clock } from 'lucide-react';
+import { Users, Trash2, Activity, UserCog, Check, X, Map as MapIcon, Navigation, Leaf, Search, Bell, Menu, ChevronDown, CreditCard, TrendingUp, DollarSign, Filter, MoreVertical, LogOut, LayoutDashboard, Clock, Briefcase, CalendarRange, AlertTriangle, Route, UserCheck, ShieldAlert, IndianRupee } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import { formatDistanceToNow, format } from 'date-fns';
 import 'leaflet/dist/leaflet.css';
@@ -37,6 +37,12 @@ const AdminDashboard = () => {
   const [bins, setBins] = useState([]);
   const [exchangeItems, setExchangeItems] = useState([]);
   const [rfidRequests, setRfidRequests] = useState([]);
+  
+  // Field Staff & Ops State
+  const [leaveRequests, setLeaveRequests] = useState([]);
+  const [reportedIssues, setReportedIssues] = useState([]);
+  const [assignments, setAssignments] = useState([]);
+  const [payrollData, setPayrollData] = useState([]);
   
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [loadingExchange, setLoadingExchange] = useState(false);
@@ -95,11 +101,33 @@ const AdminDashboard = () => {
     }
   };
 
+  const fetchStaffOps = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const config = { headers: { Authorization: `Bearer ${token}` } };
+      
+      const [assignRes, leavesRes, reportsRes, payrollRes] = await Promise.all([
+        api.get('/staff-ops/assignments', config),
+        api.get('/staff-ops/leaves', config),
+        api.get('/staff-ops/reports', config),
+        api.get('/staff-ops/payroll', config)
+      ]);
+      
+      setAssignments(assignRes.data);
+      setLeaveRequests(leavesRes.data);
+      setReportedIssues(reportsRes.data);
+      setPayrollData(payrollRes.data);
+    } catch (err) {
+      console.error('Failed to fetch staff ops data', err);
+    }
+  };
+
   useEffect(() => {
     fetchUsers();
     fetchBins();
     fetchExchangeItems();
     fetchRFIDRequests();
+    fetchStaffOps();
   }, []);
 
   const showMessage = (text, type) => {
@@ -138,6 +166,42 @@ const AdminDashboard = () => {
       setRfidRequests(rfidRequests.filter(req => req._id !== userId));
     } catch (err) {
       showMessage('Failed to approve RFID', 'error');
+    }
+  };
+
+  const handleUpdateLeaveStatus = async (id, status) => {
+    try {
+      const token = localStorage.getItem('token');
+      const config = { headers: { Authorization: `Bearer ${token}` } };
+      await api.put(`/staff-ops/leaves/${id}`, { status }, config);
+      showMessage(`Leave ${status}`, 'success');
+      fetchStaffOps(); // Refresh
+    } catch (err) {
+      showMessage('Failed to update leave', 'error');
+    }
+  };
+
+  const handleResolveIssue = async (id) => {
+    try {
+      const token = localStorage.getItem('token');
+      const config = { headers: { Authorization: `Bearer ${token}` } };
+      await api.put(`/staff-ops/reports/${id}/resolve`, {}, config);
+      showMessage('Issue resolved', 'success');
+      fetchStaffOps(); // Refresh
+    } catch (err) {
+      showMessage('Failed to resolve issue', 'error');
+    }
+  };
+
+  const handleProcessPayroll = async (id) => {
+    try {
+      const token = localStorage.getItem('token');
+      const config = { headers: { Authorization: `Bearer ${token}` } };
+      await api.put(`/staff-ops/payroll/${id}/pay`, {}, config);
+      showMessage('Payment processed successfully!', 'success');
+      setPayrollData(payrollData.map(p => p._id === id ? { ...p, status: 'Paid', paidAt: new Date().toISOString() } : p));
+    } catch (err) {
+      showMessage('Failed to process payment.', 'error');
     }
   };
 
@@ -233,6 +297,33 @@ const AdminDashboard = () => {
               icon={<CreditCard className="h-5 w-5" />} 
               label="RFID Requests" 
               badge={rfidRequests.length}
+            />
+            <NavItem 
+              active={activeTab === 'staff-ops'} 
+              onClick={() => setActiveTab('staff-ops')} 
+              icon={<Route className="h-5 w-5" />} 
+              label="Route Assignments" 
+            />
+            <NavItem 
+              active={activeTab === 'leave-requests'} 
+              onClick={() => setActiveTab('leave-requests')} 
+              icon={<UserCheck className="h-5 w-5" />} 
+              label="Leave Requests" 
+              badge={leaveRequests.filter(l => l.status === 'Pending').length || 0}
+            />
+            <NavItem 
+              active={activeTab === 'bin-issues'} 
+              onClick={() => setActiveTab('bin-issues')} 
+              icon={<ShieldAlert className="h-5 w-5" />} 
+              label="Bin Issues" 
+              badge={reportedIssues.filter(i => i.status === 'Open').length || 0}
+            />
+            <NavItem 
+              active={activeTab === 'payroll'} 
+              onClick={() => setActiveTab('payroll')} 
+              icon={<IndianRupee className="h-5 w-5" />} 
+              label="Salary & Payroll" 
+              badge={payrollData.filter(p => p.status === 'Pending').length || 0}
             />
             
             <p className="px-3 text-[10px] font-bold text-gray-500 uppercase tracking-widest mt-8 mb-3">System</p>
@@ -677,6 +768,234 @@ const AdminDashboard = () => {
                   ))}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* ROUTE ASSIGNMENTS TAB */}
+          {activeTab === 'staff-ops' && (
+            <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden animate-fade-in p-8 flex flex-col gap-8 h-full overflow-y-auto">
+              
+              {/* Top Stats */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="bg-gradient-to-br from-brand-green to-brand-darkBlue p-6 rounded-2xl text-white shadow-lg relative overflow-hidden">
+                  <div className="absolute top-0 right-0 p-4 opacity-20"><Briefcase className="h-20 w-20" /></div>
+                  <h4 className="text-sm font-bold uppercase tracking-widest text-green-100 mb-1">Active Field Staff</h4>
+                  <p className="text-4xl font-black">{assignments.length}</p>
+                </div>
+              </div>
+
+              <div className="space-y-8">
+                {/* Daily Assignments */}
+                <div className="bg-gray-50 rounded-2xl border border-gray-200 p-6">
+                  <div className="flex justify-between items-center mb-6">
+                    <h3 className="text-lg font-black text-gray-900 flex items-center"><Route className="h-5 w-5 mr-2 text-brand-green"/> Daily Route Assignments</h3>
+                    <button className="text-xs font-bold text-brand-green bg-green-50 px-3 py-1.5 rounded-lg border border-green-100 hover:bg-brand-green hover:text-white transition-colors">Assign New</button>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {assignments.map(assign => (
+                      <div key={assign._id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between">
+                        <div className="flex items-center space-x-4">
+                          <div className="h-10 w-10 bg-brand-green/10 text-brand-green rounded-full flex items-center justify-center font-black">
+                            {assign.staffId?.name?.charAt(0) || '?'}
+                          </div>
+                          <div>
+                            <p className="font-bold text-gray-900">{assign.staffId?.name || 'Unknown'}</p>
+                            <p className="text-xs font-medium text-gray-500">Zone: {assign.zone}</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${assign.routeStatus === 'Completed' ? 'bg-green-100 text-green-700' : assign.routeStatus === 'In Progress' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
+                            {assign.routeStatus}
+                          </span>
+                          <p className="text-[10px] text-gray-400 font-bold mt-1.5">{assign.completed} / {assign.total} Stops</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* LEAVE REQUESTS TAB */}
+          {activeTab === 'leave-requests' && (
+            <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden animate-fade-in p-8 flex flex-col gap-8 h-full overflow-y-auto">
+              {/* Leave Requests */}
+              <div className="bg-gray-50 rounded-2xl border border-gray-200 p-6 h-full">
+                <h3 className="text-lg font-black text-gray-900 flex items-center mb-6"><UserCheck className="h-5 w-5 mr-2 text-purple-500"/> Leave Requests</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {leaveRequests.map(leave => (
+                        <div key={leave._id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+                          <div className="flex justify-between items-start mb-3">
+                            <div>
+                              <p className="font-bold text-gray-900 flex items-center">{leave.staffId?.name || 'Unknown'} <span className="ml-2 text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">{leave.staffId?.role || 'Staff'}</span></p>
+                              <p className="text-sm font-medium text-purple-600 mt-1">{leave.type}</p>
+                            </div>
+                            <span className={`text-xs font-bold px-2 py-1 rounded ${leave.status === 'Pending' ? 'bg-amber-50 text-amber-600 border border-amber-200' : leave.status === 'Approved' ? 'bg-green-50 text-green-600 border border-green-200' : 'bg-red-50 text-red-600 border border-red-200'}`}>
+                              {leave.status}
+                            </span>
+                          </div>
+                          <p className="text-xs text-gray-500 font-medium mb-4 flex items-center"><CalendarRange className="h-3 w-3 mr-1"/> {leave.dateStr}</p>
+                          
+                          {leave.status === 'Pending' && (
+                            <div className="flex space-x-2">
+                              <button 
+                                onClick={() => handleUpdateLeaveStatus(leave._id, 'Approved')}
+                                className="flex-1 bg-green-50 hover:bg-green-100 text-green-700 text-xs font-bold py-2 rounded-lg border border-green-200 transition-colors"
+                              >Approve</button>
+                              <button 
+                                onClick={() => handleUpdateLeaveStatus(leave._id, 'Denied')}
+                                className="flex-1 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-bold py-2 rounded-lg border border-red-200 transition-colors"
+                              >Deny</button>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+            </div>
+          )}
+
+          {/* BIN ISSUES TAB */}
+          {activeTab === 'bin-issues' && (
+            <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden animate-fade-in p-8 flex flex-col gap-8 h-full overflow-y-auto">
+              <div className="bg-gray-50 rounded-2xl border border-gray-200 p-6 h-full">
+                <h3 className="text-lg font-black text-gray-900 flex items-center mb-6"><ShieldAlert className="h-5 w-5 mr-2 text-amber-500"/> Field Issues Reported</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {reportedIssues.map(issue => (
+                    <div key={issue._id} className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 relative overflow-hidden">
+                      {issue.issueCategory === 'Physical Damage' && <div className="absolute top-0 left-0 w-1 h-full bg-red-500"></div>}
+                      {issue.issueCategory === 'Sensor Failure' && <div className="absolute top-0 left-0 w-1 h-full bg-orange-500"></div>}
+                      
+                      <div className="flex justify-between items-start mb-2 pl-2">
+                        <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{issue.binId?.name || 'Bin'}</span>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${issue.status === 'Open' || issue.status === 'Pending' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-500'}`}>
+                          {issue.status}
+                        </span>
+                      </div>
+                      
+                      <div className="pl-2">
+                        <h4 className="font-bold text-gray-900 text-base">{issue.issueCategory}: {issue.description}</h4>
+                        <p className="text-xs text-gray-500 font-medium mt-1 flex items-center"><MapIcon className="h-3 w-3 mr-1"/> {issue.binLocationName}</p>
+                        
+                        <div className="mt-4 flex justify-between items-end border-t border-gray-50 pt-3">
+                          <p className="text-[10px] text-gray-400 font-bold">Reported by: <span className="text-gray-700">{issue.reportedBy?.name || 'System'}</span></p>
+                          {(issue.status === 'Open' || issue.status === 'Pending') && (
+                            <button 
+                              onClick={() => handleResolveIssue(issue._id)}
+                              className="text-xs font-bold text-white bg-brand-darkBlue hover:bg-black px-3 py-1.5 rounded transition-colors shadow-sm"
+                            >
+                              Mark Resolved
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* PAYROLL TAB */}
+          {activeTab === 'payroll' && (
+            <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden animate-fade-in p-8 flex flex-col gap-8 h-full overflow-y-auto">
+              
+              {/* Top Stats */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="bg-gradient-to-br from-brand-darkBlue to-indigo-900 p-6 rounded-2xl text-white shadow-lg relative overflow-hidden">
+                  <div className="absolute top-0 right-0 p-4 opacity-20"><IndianRupee className="h-20 w-20" /></div>
+                  <h4 className="text-sm font-bold uppercase tracking-widest text-indigo-200 mb-1">Total Payroll (Month)</h4>
+                  <p className="text-4xl font-black">₹{payrollData.reduce((acc, curr) => acc + curr.netPay, 0).toLocaleString()}</p>
+                </div>
+                <div className="bg-white border border-gray-200 p-6 rounded-2xl shadow-sm relative overflow-hidden">
+                  <div className="absolute top-0 right-0 p-4 opacity-5 text-gray-400"><TrendingUp className="h-20 w-20" /></div>
+                  <h4 className="text-sm font-bold uppercase tracking-widest text-gray-500 mb-1">Bonuses Awarded</h4>
+                  <p className="text-4xl font-black text-brand-green">₹{payrollData.reduce((acc, curr) => acc + curr.performanceBonus, 0).toLocaleString()}</p>
+                </div>
+                <div className="bg-white border border-gray-200 p-6 rounded-2xl shadow-sm relative overflow-hidden">
+                  <div className="absolute top-0 right-0 p-4 opacity-5 text-gray-400"><Clock className="h-20 w-20" /></div>
+                  <h4 className="text-sm font-bold uppercase tracking-widest text-gray-500 mb-1">Pending Payments</h4>
+                  <p className="text-4xl font-black text-amber-500">{payrollData.filter(p => p.status === 'Pending').length}</p>
+                </div>
+              </div>
+
+              {/* Chart */}
+              <div className="bg-white border border-gray-100 rounded-2xl shadow-sm p-6 h-[400px]">
+                <h3 className="text-lg font-black text-gray-900 mb-6 flex items-center"><TrendingUp className="h-5 w-5 mr-2 text-indigo-500"/> Salary Distribution</h3>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={payrollData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="staffId.name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} />
+                    <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} tickFormatter={(value) => `₹${value/1000}k`} />
+                    <RechartsTooltip 
+                      cursor={{fill: '#f8fafc'}}
+                      contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)' }}
+                    />
+                    <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px' }}/>
+                    <Bar dataKey="baseSalary" name="Base Salary" stackId="a" fill="#1e293b" radius={[0, 0, 4, 4]} />
+                    <Bar dataKey="performanceBonus" name="Bonus" stackId="a" fill="#10b981" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* Data Table */}
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                <div className="p-6 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
+                  <h3 className="text-lg font-black text-gray-900">Staff Payroll Data</h3>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-gray-50 border-b border-gray-200">
+                        <th className="p-5 text-xs font-black text-gray-500 uppercase tracking-widest">Staff Name</th>
+                        <th className="p-5 text-xs font-black text-gray-500 uppercase tracking-widest">Base Salary</th>
+                        <th className="p-5 text-xs font-black text-gray-500 uppercase tracking-widest">Bonus</th>
+                        <th className="p-5 text-xs font-black text-gray-500 uppercase tracking-widest">Deductions</th>
+                        <th className="p-5 text-xs font-black text-gray-900 uppercase tracking-widest">Net Pay</th>
+                        <th className="p-5 text-xs font-black text-gray-500 uppercase tracking-widest">Status</th>
+                        <th className="p-5 text-xs font-black text-gray-500 uppercase tracking-widest text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {payrollData.map(payroll => (
+                        <tr key={payroll._id} className="hover:bg-gray-50/50 transition-colors">
+                          <td className="p-5">
+                            <div className="flex items-center space-x-3">
+                              <div className="h-8 w-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 text-xs font-black">
+                                {payroll.staffId?.name?.charAt(0).toUpperCase() || '?'}
+                              </div>
+                              <span className="block text-sm font-bold text-gray-700">{payroll.staffId?.name || 'Unknown'}</span>
+                            </div>
+                          </td>
+                          <td className="p-5 text-sm font-medium text-gray-600">₹{payroll.baseSalary.toLocaleString()}</td>
+                          <td className="p-5 text-sm font-medium text-brand-green">+₹{payroll.performanceBonus.toLocaleString()}</td>
+                          <td className="p-5 text-sm font-medium text-red-500">-₹{payroll.deductions.toLocaleString()}</td>
+                          <td className="p-5 text-sm font-black text-gray-900">₹{payroll.netPay.toLocaleString()}</td>
+                          <td className="p-5">
+                            <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${payroll.status === 'Paid' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                              {payroll.status}
+                            </span>
+                          </td>
+                          <td className="p-5 text-right">
+                            {payroll.status === 'Pending' ? (
+                              <button 
+                                onClick={() => handleProcessPayroll(payroll._id)}
+                                className="text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg transition-colors shadow-sm"
+                              >
+                                Pay Now
+                              </button>
+                            ) : (
+                              <span className="text-xs font-bold text-gray-400">Paid</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
             </div>
           )}
 

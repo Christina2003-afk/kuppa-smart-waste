@@ -31,6 +31,7 @@ app.use('/api/exchange', exchangeRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/wallet', require('./routes/walletRoutes'));
 app.use('/api/reports', require('./routes/reportRoutes'));
+app.use('/api/staff-ops', require('./routes/staffOpsRoutes'));
 
 // Base route
 app.get('/', (req, res) => {

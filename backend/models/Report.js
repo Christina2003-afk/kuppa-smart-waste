@@ -10,6 +10,11 @@ const reportSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  reportedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: false, // Optional because public users might report anonymously
+  },
   issueCategory: {
     type: String,
     enum: ['Sensor Failure', 'Physical Damage', 'Road Blocked / Inaccessible', 'Other'],

@@ -132,6 +132,14 @@ const StaffDashboard = () => {
   const fileInputRef = React.useRef(null);
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
+  
+  const [leaveForm, setLeaveForm] = useState({
+    type: 'Sick Leave',
+    dateStr: '',
+    reason: ''
+  });
+  const [leaveSubmitting, setLeaveSubmitting] = useState(false);
+  const [leaveSuccess, setLeaveSuccess] = useState(false);
 
   const fetchReports = async () => {
     try {
@@ -145,6 +153,32 @@ const StaffDashboard = () => {
       }
     } catch (err) {
       console.error("Error fetching reports:", err);
+    }
+  };
+
+  const handleLeaveSubmit = async (e) => {
+    e.preventDefault();
+    if (!leaveForm.dateStr) return;
+    setLeaveSubmitting(true);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch('http://localhost:5001/api/staff-ops/leaves', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(leaveForm)
+      });
+      if (res.ok) {
+        setLeaveSuccess(true);
+        setLeaveForm({ type: 'Sick Leave', dateStr: '', reason: '' });
+        setTimeout(() => setLeaveSuccess(false), 3000);
+      }
+    } catch (err) {
+      console.error("Error submitting leave:", err);
+    } finally {
+      setLeaveSubmitting(false);
     }
   };
 
@@ -248,6 +282,7 @@ const StaffDashboard = () => {
     { name: 'AI Optimizer', icon: Sparkles },
     { name: 'Reports', icon: FileText },
     { name: 'Calendar', icon: Calendar },
+    { name: 'Salary & Payroll', icon: IndianRupee },
     { name: 'Messages', icon: MessageSquare },
     { name: 'My Gear', icon: Shirt },
     { name: 'Access Card', icon: CreditCard },
@@ -334,7 +369,7 @@ const StaffDashboard = () => {
           <p className="text-xs text-brand-lightGreen font-bold uppercase tracking-widest mt-1">Staff Portal</p>
         </div>
 
-        <nav className="flex-1 py-8 px-4 space-y-2">
+        <nav className="flex-1 overflow-y-auto py-8 px-4 space-y-2 no-scrollbar">
           {menuItems.map((item) => (
             <button
               key={item.name}
@@ -876,25 +911,46 @@ const StaffDashboard = () => {
                 <h3 className="text-lg font-bold text-gray-800 mb-6 flex items-center">
                   <CalendarIcon className="w-5 h-5 mr-2 text-gray-400" /> Request Time Off
                 </h3>
-                <form className="space-y-4 flex-1">
+                <form className="space-y-4 flex-1" onSubmit={handleLeaveSubmit}>
                   <div>
                     <label className="block text-xs font-bold text-gray-700 uppercase mb-2">Leave Type</label>
-                    <select className="w-full bg-gray-50 border border-gray-200 text-gray-700 text-sm rounded-xl focus:ring-brand-green focus:border-brand-green p-3 font-medium">
+                    <select 
+                      value={leaveForm.type}
+                      onChange={(e) => setLeaveForm({...leaveForm, type: e.target.value})}
+                      className="w-full bg-gray-50 border border-gray-200 text-gray-700 text-sm rounded-xl focus:ring-brand-green focus:border-brand-green p-3 font-medium"
+                    >
                       <option>Sick Leave</option>
                       <option>Vacation</option>
                       <option>Personal Emergency</option>
+                      <option>Other</option>
                     </select>
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-gray-700 uppercase mb-2">Date</label>
-                    <input type="date" className="w-full bg-gray-50 border border-gray-200 text-gray-700 text-sm rounded-xl focus:ring-brand-green focus:border-brand-green p-3 font-medium" />
+                    <input 
+                      type="date" 
+                      value={leaveForm.dateStr}
+                      onChange={(e) => setLeaveForm({...leaveForm, dateStr: e.target.value})}
+                      required
+                      className="w-full bg-gray-50 border border-gray-200 text-gray-700 text-sm rounded-xl focus:ring-brand-green focus:border-brand-green p-3 font-medium" 
+                    />
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-gray-700 uppercase mb-2">Reason</label>
-                    <textarea rows="2" className="w-full bg-gray-50 border border-gray-200 text-gray-700 text-sm rounded-xl focus:ring-brand-green focus:border-brand-green p-3 font-medium resize-none" placeholder="Brief explanation..."></textarea>
+                    <textarea 
+                      rows="2" 
+                      value={leaveForm.reason}
+                      onChange={(e) => setLeaveForm({...leaveForm, reason: e.target.value})}
+                      className="w-full bg-gray-50 border border-gray-200 text-gray-700 text-sm rounded-xl focus:ring-brand-green focus:border-brand-green p-3 font-medium resize-none" 
+                      placeholder="Brief explanation..."
+                    ></textarea>
                   </div>
-                  <button type="button" className="w-full bg-gray-900 hover:bg-black text-white font-bold py-3 rounded-xl transition-colors text-sm">
-                    Submit Request
+                  <button 
+                    type="submit" 
+                    disabled={leaveSubmitting}
+                    className="w-full bg-gray-900 hover:bg-black text-white font-bold py-3 rounded-xl transition-colors text-sm disabled:bg-gray-400"
+                  >
+                    {leaveSubmitting ? 'Submitting...' : leaveSuccess ? 'Success!' : 'Submit Request'}
                   </button>
                 </form>
 
