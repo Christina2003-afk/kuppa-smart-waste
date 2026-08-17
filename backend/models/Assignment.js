@@ -25,6 +25,10 @@ const assignmentSchema = new mongoose.Schema({
     enum: ['Starting', 'In Progress', 'Completed'],
     default: 'Starting',
   },
+  proofPhotoUrl: {
+    type: String,
+    default: null,
+  },
   assignedDate: {
     type: Date,
     default: Date.now,

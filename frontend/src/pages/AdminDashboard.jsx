@@ -1,6 +1,6 @@
 import React, { useContext, useState, useEffect, useMemo } from 'react';
 import { AuthContext } from '../context/AuthContext';
-import { Users, Trash2, Activity, UserCog, Check, X, Map as MapIcon, Navigation, Leaf, Search, Bell, Menu, ChevronDown, CreditCard, TrendingUp, DollarSign, Filter, MoreVertical, LogOut, LayoutDashboard, Clock, Briefcase, CalendarRange, AlertTriangle, Route, UserCheck, ShieldAlert, IndianRupee } from 'lucide-react';
+import { Users, Trash2, Activity, UserCog, Check, X, Map as MapIcon, Navigation, Leaf, Search, Bell, Menu, ChevronDown, CreditCard, TrendingUp, DollarSign, Filter, MoreVertical, LogOut, LayoutDashboard, Clock, Briefcase, CalendarRange, AlertTriangle, Route, UserCheck, ShieldAlert, IndianRupee, Ghost, Sparkles, Thermometer, Droplets } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import { formatDistanceToNow, format } from 'date-fns';
 import 'leaflet/dist/leaflet.css';
@@ -54,16 +54,33 @@ const AdminDashboard = () => {
   const [roleFilter, setRoleFilter] = useState('All');
   const [showNotifications, setShowNotifications] = useState(false);
 
+  // AI Prediction State
+  const [aiPrediction, setAiPrediction] = useState(null);
+  const [predicting, setPredicting] = useState(false);
+  const [aiParams, setAiParams] = useState({
+    temperature: 27,
+    humidity: 65,
+    hourOfDay: 9,
+    isWeekend: false,
+    previousFillLevel: 40
+  });
+
+  // Assign Route state
+  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [pendingDispatchBin, setPendingDispatchBin] = useState(null);
+  const [selectedStaffForAssign, setSelectedStaffForAssign] = useState('');
+
+  const fullBinsCount = bins.filter(b => b.fillLevel >= 80 || b.status === 'Full').length;
+  const criticalOverflowCount = bins.filter(b => b.fillLevel >= 100).length;
+
   // Fetch Data Functions
   const fetchUsers = async () => {
     setLoadingUsers(true);
     try {
-      const token = localStorage.getItem('token');
-      const config = { headers: { Authorization: `Bearer ${token}` } };
-      const res = await api.get('/users', config);
-      setUsers(res.data);
+      const { data } = await api.get('/users');
+      setUsers(data);
     } catch (err) {
-      showMessage('Failed to fetch users', 'error');
+      console.error('Failed to fetch users');
     } finally {
       setLoadingUsers(false);
     }
@@ -129,6 +146,29 @@ const AdminDashboard = () => {
     fetchRFIDRequests();
     fetchStaffOps();
   }, []);
+
+  // Global Alert Audio Effect for Overflowing Bins (>= 100%)
+  useEffect(() => {
+    const criticalBins = bins.filter(b => b.fillLevel >= 100);
+    
+    if (criticalBins.length > 0) {
+      // Use browser's Text-to-Speech API for the instruction
+      const speakAlert = () => {
+        if ('speechSynthesis' in window) {
+          // Get the names of the critical bins
+          const binNames = criticalBins.map(b => b.name).join(' and ');
+          
+          const msg = new SpeechSynthesisUtterance(`Alert. The bin at ${binNames} is full. Please take the waste immediately.`);
+          msg.rate = 0.9;
+          msg.pitch = 1.2;
+          window.speechSynthesis.speak(msg);
+        }
+      };
+      
+      // Delay slightly to ensure user interaction has occurred
+      setTimeout(speakAlert, 2000);
+    }
+  }, [bins]);
 
   const showMessage = (text, type) => {
     setMessage({ text, type });
@@ -208,6 +248,54 @@ const AdminDashboard = () => {
   const handleLogout = () => {
     logout();
     navigate('/');
+  };
+
+  const handleCreateAssignment = async () => {
+    if (!selectedStaffForAssign || !pendingDispatchBin) return;
+    try {
+      const token = localStorage.getItem('token');
+      const config = { headers: { Authorization: `Bearer ${token}` } };
+      await api.post('/staff-ops/assignments', {
+        staffId: selectedStaffForAssign,
+        zone: `Clear Bin: ${pendingDispatchBin.name}`,
+        totalStops: 1
+      }, config);
+      
+      showMessage(`Task assigned to staff successfully!`, 'success');
+      setShowAssignModal(false);
+      setPendingDispatchBin(null);
+      setSelectedStaffForAssign('');
+      fetchStaffOps(); // refresh assignments list
+    } catch (err) {
+      showMessage('Failed to assign task.', 'error');
+    }
+  };
+
+  const runAiPrediction = async () => {
+    setPredicting(true);
+    try {
+      const token = localStorage.getItem('token');
+      const config = { headers: { Authorization: `Bearer ${token}` } };
+      const { data } = await api.post('/ai/predict', aiParams, config);
+      
+      // Simulate network delay for "AI thinking" effect
+      setTimeout(() => {
+        setAiPrediction(data);
+        setPredicting(false);
+      }, 1500);
+    } catch (err) {
+      showMessage('Failed to run AI prediction', 'error');
+      setPredicting(false);
+    }
+  };
+
+  const getRoleBadgeColor = (role) => {
+    switch(role) {
+      case 'Admin': return 'bg-purple-100 text-purple-700';
+      case 'Staff': return 'bg-blue-100 text-blue-700';
+      case 'User': return 'bg-gray-100 text-gray-700';
+      default: return 'bg-gray-100 text-gray-700';
+    }
   };
 
   const parseUserLocation = (addressStr) => {
@@ -292,6 +380,30 @@ const AdminDashboard = () => {
               label="Organic Exchange" 
             />
             <NavItem 
+              active={activeTab === 'full-bins'} 
+              onClick={() => setActiveTab('full-bins')} 
+              icon={<Trash2 className="h-5 w-5" />} 
+              label="Full Bins" 
+              badge={fullBinsCount}
+              isAlert={true}
+            />
+            <NavItem 
+              active={activeTab === 'unused-bins'} 
+              onClick={() => setActiveTab('unused-bins')} 
+              icon={<Ghost className="h-5 w-5" />} 
+              label="Unused Bins" 
+              badge={bins.filter(b => b.fillLevel <= 10).length || 0}
+            />
+            
+            <p className="px-3 text-[10px] font-bold text-gray-500 uppercase tracking-widest mt-8 mb-3">Intelligence</p>
+            <NavItem 
+              active={activeTab === 'ai-forecast'} 
+              onClick={() => setActiveTab('ai-forecast')} 
+              icon={<Sparkles className="h-5 w-5" />} 
+              label="AI Fill Forecast" 
+            />
+
+            <p className="px-3 text-[10px] font-bold text-gray-500 uppercase tracking-widest mt-8 mb-3">Operations</p><NavItem 
               active={activeTab === 'rfid'} 
               onClick={() => setActiveTab('rfid')} 
               icon={<CreditCard className="h-5 w-5" />} 
@@ -413,6 +525,19 @@ const AdminDashboard = () => {
             )}
           </div>
         </header>
+
+        {/* CRITICAL GLOBAL ALERT */}
+        {fullBinsCount > 0 && (
+          <div className="bg-red-600 text-white px-6 py-3 flex items-center justify-between animate-pulse cursor-pointer shadow-md z-10" onClick={() => setActiveTab('full-bins')}>
+            <div className="flex items-center font-bold">
+              <AlertTriangle className="h-5 w-5 mr-3 flex-shrink-0" />
+              <span>SLA ALERT: {fullBinsCount} bin{fullBinsCount > 1 ? 's are' : ' is'} critically full or overflowing! Immediate dispatch required.</span>
+            </div>
+            <button className="text-xs font-black uppercase tracking-widest bg-white text-red-600 px-4 py-1.5 rounded-full hover:bg-red-50 transition-colors">
+              View Bins
+            </button>
+          </div>
+        )}
 
         {/* ALERTS */}
         {message.text && (
@@ -789,25 +914,68 @@ const AdminDashboard = () => {
                 <div className="bg-gray-50 rounded-2xl border border-gray-200 p-6">
                   <div className="flex justify-between items-center mb-6">
                     <h3 className="text-lg font-black text-gray-900 flex items-center"><Route className="h-5 w-5 mr-2 text-brand-green"/> Daily Route Assignments</h3>
-                    <button className="text-xs font-bold text-brand-green bg-green-50 px-3 py-1.5 rounded-lg border border-green-100 hover:bg-brand-green hover:text-white transition-colors">Assign New</button>
+                    <button onClick={() => {setPendingDispatchBin({name: 'General Route'}); setShowAssignModal(true);}} className="text-xs font-bold text-brand-green bg-green-50 px-3 py-1.5 rounded-lg border border-green-100 hover:bg-brand-green hover:text-white transition-colors">Assign New</button>
                   </div>
+
+                  {/* ASSIGNMENT MODAL / INLINE FORM */}
+                  {showAssignModal && pendingDispatchBin && (
+                    <div className="bg-white p-5 rounded-2xl shadow-lg border-2 border-brand-green mb-6 animate-fade-in-down">
+                      <h4 className="font-black text-gray-900 mb-2">Assign Task to Staff</h4>
+                      <p className="text-sm font-bold text-brand-green bg-green-50 px-3 py-2 rounded-lg border border-green-100 mb-4">
+                        Task: Clear {pendingDispatchBin.name}
+                      </p>
+                      <div className="flex flex-col md:flex-row gap-3">
+                        <select 
+                          className="flex-1 bg-gray-50 border border-gray-200 text-sm font-bold text-gray-700 rounded-xl px-4 py-2.5 focus:outline-none focus:border-brand-green"
+                          value={selectedStaffForAssign}
+                          onChange={(e) => setSelectedStaffForAssign(e.target.value)}
+                        >
+                          <option value="">Select Field Staff...</option>
+                          {users.filter(u => u.role === 'Staff').map(staff => (
+                            <option key={staff._id} value={staff._id}>{staff.name}</option>
+                          ))}
+                        </select>
+                        <button 
+                          onClick={handleCreateAssignment}
+                          disabled={!selectedStaffForAssign}
+                          className="bg-brand-green hover:bg-emerald-600 text-white font-bold py-2.5 px-6 rounded-xl transition-colors disabled:opacity-50"
+                        >
+                          Confirm Dispatch
+                        </button>
+                        <button 
+                          onClick={() => { setShowAssignModal(false); setPendingDispatchBin(null); }}
+                          className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-2.5 px-6 rounded-xl transition-colors"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {assignments.map(assign => (
-                      <div key={assign._id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between">
+                      <div key={assign._id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between group">
                         <div className="flex items-center space-x-4">
-                          <div className="h-10 w-10 bg-brand-green/10 text-brand-green rounded-full flex items-center justify-center font-black">
+                          <div className="h-12 w-12 bg-brand-green/10 text-brand-green rounded-full flex items-center justify-center font-black text-xl">
                             {assign.staffId?.name?.charAt(0) || '?'}
                           </div>
                           <div>
                             <p className="font-bold text-gray-900">{assign.staffId?.name || 'Unknown'}</p>
-                            <p className="text-xs font-medium text-gray-500">Zone: {assign.zone}</p>
+                            <p className="text-xs font-bold text-gray-500 max-w-[150px] truncate">{assign.zone}</p>
                           </div>
                         </div>
-                        <div className="text-right">
-                          <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${assign.routeStatus === 'Completed' ? 'bg-green-100 text-green-700' : assign.routeStatus === 'In Progress' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
-                            {assign.routeStatus}
-                          </span>
-                          <p className="text-[10px] text-gray-400 font-bold mt-1.5">{assign.completed} / {assign.total} Stops</p>
+                        <div className="flex items-center space-x-4 text-right">
+                          {assign.routeStatus === 'Completed' && assign.proofPhotoUrl && (
+                            <div className="hidden sm:block h-10 w-10 rounded-lg overflow-hidden border-2 border-green-100 cursor-pointer group-hover:scale-110 transition-transform">
+                              <img src={`http://localhost:5001${assign.proofPhotoUrl}`} className="w-full h-full object-cover" title="View Proof" />
+                            </div>
+                          )}
+                          <div>
+                            <span className={`text-xs font-bold px-3 py-1 rounded-full ${assign.routeStatus === 'Completed' ? 'bg-green-100 text-green-700 border border-green-200' : assign.routeStatus === 'In Progress' ? 'bg-blue-100 text-blue-700' : 'bg-red-50 text-red-600 border border-red-100'}`}>
+                              {assign.routeStatus === 'Starting' ? 'Urgent Task' : assign.routeStatus}
+                            </span>
+                            <p className="text-[10px] text-gray-400 font-bold mt-1.5 uppercase tracking-widest">{new Date(assign.assignedDate || Date.now()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -996,6 +1164,278 @@ const AdminDashboard = () => {
                 </div>
               </div>
 
+            </div>
+          )}
+
+          {/* FULL BINS TAB */}
+          {activeTab === 'full-bins' && (
+            <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden animate-fade-in p-8 flex flex-col gap-8 h-full overflow-y-auto">
+              <div className="bg-gray-50 rounded-2xl border border-gray-200 p-6 h-full">
+                <h3 className="text-lg font-black text-gray-900 flex items-center mb-6"><Trash2 className="h-5 w-5 mr-2 text-red-500"/> Full & Critical Bins</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {bins.filter(b => b.fillLevel >= 80 || b.status === 'Full').length === 0 ? (
+                    <div className="col-span-full py-12 text-center text-gray-400 font-bold">No full bins right now.</div>
+                  ) : (
+                    bins.filter(b => b.fillLevel >= 80 || b.status === 'Full')
+                        .sort((a, b) => b.fillLevel - a.fillLevel)
+                        .map(bin => (
+                      <div key={bin._id} className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 relative overflow-hidden group hover:shadow-md transition-shadow">
+                        <div className={`absolute top-0 left-0 w-1.5 h-full ${bin.fillLevel >= 90 ? 'bg-red-500' : 'bg-orange-500'}`}></div>
+                        
+                        <div className="flex justify-between items-start mb-4 pl-3">
+                          <div>
+                            <h4 className="font-black text-gray-900 text-lg mb-1">{bin.name}</h4>
+                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{bin.district}</p>
+                          </div>
+                          <span className={`text-xs font-black px-2.5 py-1 rounded-full ${bin.fillLevel >= 90 ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'}`}>
+                            {bin.fillLevel}% Full
+                          </span>
+                        </div>
+                        
+                        <div className="pl-3 space-y-3 mt-4">
+                          <div className="flex items-center text-sm font-medium text-gray-600">
+                            <Activity className="h-4 w-4 mr-2 text-gray-400"/> Status: <span className="ml-1 text-gray-900 font-bold">{bin.status}</span>
+                          </div>
+                          <div className="flex items-center text-sm font-medium text-gray-600">
+                            <Clock className="h-4 w-4 mr-2 text-gray-400"/> Last Emptied: <span className="ml-1 text-gray-900">{bin.lastEmptied ? formatDistanceToNow(new Date(bin.lastEmptied), {addSuffix: true}) : 'Unknown'}</span>
+                          </div>
+                          <div className="flex items-center text-sm font-medium text-gray-600">
+                            <AlertTriangle className="h-4 w-4 mr-2 text-gray-400"/> Issues: <span className="ml-1 text-gray-900">{bin.issues?.length || 0}</span>
+                          </div>
+                          
+                          <div className="mt-2 p-3 bg-red-50 border border-red-100 rounded-xl flex items-start">
+                            <Bell className="h-4 w-4 text-red-500 mr-2 mt-0.5 flex-shrink-0" />
+                            <div>
+                              <p className="text-xs font-black text-red-700 uppercase tracking-wide mb-0.5">SLA Alert</p>
+                              <p className="text-xs text-red-600 font-medium">Must dispatch staff within <span className="font-bold">5 hours</span> to avoid overflow.</p>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="mt-6 pl-3 flex gap-2">
+                          <button 
+                            onClick={() => setActiveTab('map')}
+                            className="flex-1 text-xs font-bold text-gray-600 bg-gray-50 hover:bg-gray-100 px-3 py-2.5 rounded-xl transition-colors flex items-center justify-center border border-gray-200"
+                          >
+                            <MapIcon className="h-4 w-4 mr-1.5"/> View Map
+                          </button>
+                          <button 
+                            className="flex-1 text-xs font-bold text-white bg-red-500 hover:bg-red-600 px-3 py-2.5 rounded-xl transition-colors flex items-center justify-center shadow-sm"
+                            onClick={() => {
+                              setPendingDispatchBin(bin);
+                              setActiveTab('staff-ops');
+                              setShowAssignModal(true);
+                            }}
+                          >
+                            <Route className="h-4 w-4 mr-1.5"/> Dispatch Staff
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* UNUSED BINS TAB */}
+          {activeTab === 'unused-bins' && (
+            <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden animate-fade-in p-8 flex flex-col gap-8 h-full overflow-y-auto">
+              <div className="bg-gray-50 rounded-2xl border border-gray-200 p-6 h-full">
+                <div className="flex flex-col mb-6">
+                  <h3 className="text-lg font-black text-gray-900 flex items-center"><Ghost className="h-5 w-5 mr-2 text-indigo-500"/> Underutilized Bins</h3>
+                  <p className="text-sm text-gray-500 mt-1 font-medium">Bins with very low fill levels (≤ 10%). Helps identify poor locations that might not be valuable.</p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {bins.filter(b => b.fillLevel <= 10).length === 0 ? (
+                    <div className="col-span-full py-12 text-center text-gray-400 font-bold">No unused bins found.</div>
+                  ) : (
+                    bins.filter(b => b.fillLevel <= 10).map(bin => (
+                      <div key={bin._id} className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 relative overflow-hidden group hover:shadow-md transition-shadow">
+                        <div className="absolute top-0 left-0 w-1.5 h-full bg-indigo-500"></div>
+                        
+                        <div className="flex justify-between items-start mb-4 pl-3">
+                          <div>
+                            <h4 className="font-black text-gray-900 text-lg mb-1">{bin.name}</h4>
+                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{bin.district}</p>
+                          </div>
+                          <span className="text-xs font-black px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700">
+                            {bin.fillLevel}% Full
+                          </span>
+                        </div>
+                        
+                        <div className="pl-3 space-y-3 mt-4">
+                          <div className="flex items-center text-sm font-medium text-gray-600">
+                            <Activity className="h-4 w-4 mr-2 text-gray-400"/> Status: <span className="ml-1 text-gray-900 font-bold">{bin.status}</span>
+                          </div>
+                          <div className="flex items-center text-sm font-medium text-gray-600">
+                            <Clock className="h-4 w-4 mr-2 text-gray-400"/> Last Emptied: <span className="ml-1 text-gray-900">{bin.lastEmptied ? formatDistanceToNow(new Date(bin.lastEmptied), {addSuffix: true}) : 'Unknown'}</span>
+                          </div>
+                        </div>
+
+                        <div className="mt-6 pl-3 flex gap-2">
+                          <button 
+                            onClick={() => setActiveTab('map')}
+                            className="flex-1 text-xs font-bold text-gray-600 bg-gray-50 hover:bg-gray-100 px-3 py-2.5 rounded-xl transition-colors flex items-center justify-center border border-gray-200"
+                          >
+                            <MapIcon className="h-4 w-4 mr-1.5"/> View
+                          </button>
+                          <button 
+                            className="flex-1 text-xs font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 px-3 py-2.5 rounded-xl transition-colors flex items-center justify-center border border-amber-200"
+                          >
+                            <Route className="h-4 w-4 mr-1.5"/> Relocate
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* AI FORECAST TAB */}
+          {activeTab === 'ai-forecast' && (
+            <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden animate-fade-in p-8 flex flex-col h-full overflow-y-auto">
+              <div className="mb-8">
+                <h3 className="text-2xl font-black text-gray-900 flex items-center"><Sparkles className="h-6 w-6 mr-3 text-indigo-500"/> AI Fill Level Forecaster</h3>
+                <p className="text-gray-500 mt-2 font-medium">Using Machine Learning trained on Kaggle IoT datasets to predict how fast a bin will fill based on environmental factors.</p>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+                
+                {/* Inputs */}
+                <div className="space-y-6 bg-gray-50 p-8 rounded-3xl border border-gray-100">
+                  <h4 className="font-bold text-gray-900 mb-4 uppercase tracking-widest text-xs">Environmental Simulation</h4>
+                  
+                  <div>
+                    <label className="flex justify-between text-sm font-bold text-gray-700 mb-2">
+                      <span className="flex items-center"><Thermometer className="h-4 w-4 mr-2 text-red-500"/> Temperature (°C)</span>
+                      <span>{aiParams.temperature}°C</span>
+                    </label>
+                    <input 
+                      type="range" min="0" max="50" 
+                      value={aiParams.temperature} 
+                      onChange={(e) => setAiParams({...aiParams, temperature: parseInt(e.target.value)})}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="flex justify-between text-sm font-bold text-gray-700 mb-2">
+                      <span className="flex items-center"><Droplets className="h-4 w-4 mr-2 text-blue-500"/> Humidity (%)</span>
+                      <span>{aiParams.humidity}%</span>
+                    </label>
+                    <input 
+                      type="range" min="0" max="100" 
+                      value={aiParams.humidity} 
+                      onChange={(e) => setAiParams({...aiParams, humidity: parseInt(e.target.value)})}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="flex justify-between text-sm font-bold text-gray-700 mb-2">
+                      <span className="flex items-center"><Clock className="h-4 w-4 mr-2 text-gray-500"/> Hour of Day</span>
+                      <span>{aiParams.hourOfDay}:00</span>
+                    </label>
+                    <input 
+                      type="range" min="0" max="23" 
+                      value={aiParams.hourOfDay} 
+                      onChange={(e) => setAiParams({...aiParams, hourOfDay: parseInt(e.target.value)})}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="flex justify-between text-sm font-bold text-gray-700 mb-2">
+                      <span className="flex items-center"><Activity className="h-4 w-4 mr-2 text-green-500"/> Previous Fill Level (%)</span>
+                      <span>{aiParams.previousFillLevel}%</span>
+                    </label>
+                    <input 
+                      type="range" min="0" max="100" 
+                      value={aiParams.previousFillLevel} 
+                      onChange={(e) => setAiParams({...aiParams, previousFillLevel: parseInt(e.target.value)})}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+                    <span className="text-sm font-bold text-gray-700 flex items-center"><CalendarRange className="h-4 w-4 mr-2 text-purple-500"/> Is Weekend?</span>
+                    <button 
+                      onClick={() => setAiParams({...aiParams, isWeekend: !aiParams.isWeekend})}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${aiParams.isWeekend ? 'bg-indigo-600' : 'bg-gray-200'}`}
+                    >
+                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${aiParams.isWeekend ? 'translate-x-6' : 'translate-x-1'}`}/>
+                    </button>
+                  </div>
+
+                  <button 
+                    onClick={runAiPrediction}
+                    disabled={predicting}
+                    className="w-full mt-4 bg-gray-900 hover:bg-black text-white font-black py-4 rounded-xl transition-all shadow-lg flex items-center justify-center disabled:opacity-70"
+                  >
+                    {predicting ? (
+                      <span className="flex items-center animate-pulse"><Sparkles className="h-5 w-5 mr-2 animate-spin"/> Processing AI Weights...</span>
+                    ) : (
+                      <span className="flex items-center"><Sparkles className="h-5 w-5 mr-2"/> Generate AI Forecast</span>
+                    )}
+                  </button>
+                </div>
+
+                {/* Animated Output */}
+                <div className="flex flex-col items-center justify-center bg-indigo-50/50 rounded-3xl border border-indigo-100 p-8 relative overflow-hidden">
+                  
+                  <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl -mr-20 -mt-20"></div>
+
+                  <div className="relative w-48 h-64 border-4 border-gray-300 rounded-b-3xl rounded-t-lg bg-white overflow-hidden shadow-2xl flex flex-col justify-end">
+                    {/* Bin lid */}
+                    <div className="absolute top-0 left-0 w-full h-4 bg-gray-400 border-b-4 border-gray-500 z-10"></div>
+                    
+                    {/* Animated Fill Level */}
+                    <div 
+                      className={`w-full transition-all duration-1000 ease-in-out relative flex items-center justify-center overflow-hidden
+                        ${!aiPrediction ? 'bg-gray-100' : 
+                          aiPrediction.predictedFillLevel >= 80 ? 'bg-red-500' : 
+                          aiPrediction.predictedFillLevel >= 50 ? 'bg-amber-500' : 'bg-brand-green'
+                        }`}
+                      style={{ height: `${aiPrediction ? aiPrediction.predictedFillLevel : 10}%` }}
+                    >
+                      {/* Trash texture overlay */}
+                      <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, black 1px, transparent 0)', backgroundSize: '10px 10px' }}></div>
+                      
+                      {aiPrediction && (
+                        <span className="text-white font-black text-3xl z-10 drop-shadow-md">
+                          {aiPrediction.predictedFillLevel}%
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="mt-8 text-center bg-white p-6 rounded-2xl shadow-sm border border-gray-100 w-full max-w-sm relative z-10">
+                    <h4 className="text-xs font-black uppercase tracking-widest text-gray-400 mb-2">Model Output</h4>
+                    {predicting ? (
+                      <div className="h-16 flex items-center justify-center">
+                        <div className="flex space-x-2">
+                          <div className="w-3 h-3 bg-indigo-400 rounded-full animate-bounce"></div>
+                          <div className="w-3 h-3 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                          <div className="w-3 h-3 bg-indigo-600 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                        </div>
+                      </div>
+                    ) : aiPrediction ? (
+                      <div>
+                        <p className="text-3xl font-black text-gray-900">{aiPrediction.predictedFillLevel}%</p>
+                        <p className="text-sm font-medium text-gray-500 mt-1">Confidence: <span className="text-indigo-600 font-bold">{Math.round(aiPrediction.confidence * 100)}%</span></p>
+                      </div>
+                    ) : (
+                      <div className="h-16 flex items-center justify-center">
+                        <p className="text-gray-400 font-bold text-sm">Awaiting simulation parameters...</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+              </div>
             </div>
           )}
 
@@ -1190,21 +1630,24 @@ const AdminDashboard = () => {
 };
 
 // Subcomponents
-const NavItem = ({ active, onClick, icon, label, badge }) => (
+const NavItem = ({ active, onClick, icon, label, badge, isAlert }) => (
   <button 
     onClick={onClick}
-    className={`w-full flex items-center px-4 py-3 text-sm font-bold rounded-xl transition-all duration-200 group ${
-      active 
-        ? 'bg-brand-green text-white shadow-lg shadow-brand-green/20 translate-x-1' 
-        : 'text-gray-400 hover:bg-white/5 hover:text-gray-200'
-    }`}
+    className={`w-full flex items-center justify-between px-4 py-3.5 mb-2 rounded-2xl transition-all duration-300 group
+      ${active 
+        ? 'bg-brand-green shadow-md shadow-brand-green/20' 
+        : 'hover:bg-white/5'}`}
   >
-    <div className={`mr-3 transition-colors ${active ? 'text-white' : 'text-gray-500 group-hover:text-gray-300'}`}>
-      {icon}
+    <div className="flex items-center">
+      <div className={`mr-3 ${active ? 'text-white' : 'text-gray-400 group-hover:text-white'}`}>
+        {icon}
+      </div>
+      <span className={`font-bold tracking-wide text-[13px] ${active ? 'text-white' : 'text-gray-300 group-hover:text-white'}`}>
+        {label}
+      </span>
     </div>
-    {label}
     {badge > 0 && (
-      <span className={`ml-auto text-[10px] font-black px-2 py-0.5 rounded-full ${active ? 'bg-white text-brand-green' : 'bg-red-500 text-white'}`}>
+      <span className={`px-2 py-0.5 text-[10px] font-black rounded-full ${active ? 'bg-white text-brand-green' : isAlert ? 'bg-red-500 text-white animate-pulse' : 'bg-brand-green text-white'}`}>
         {badge}
       </span>
     )}

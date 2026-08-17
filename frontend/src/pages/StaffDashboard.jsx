@@ -5,7 +5,7 @@ import {
   Trash2, TrendingUp, CheckCircle, Clock, MapPin, Search, Bell, Download, Filter,
   IndianRupee, Briefcase, FileText, Navigation, AlertTriangle, Camera, Upload,
   Calendar as CalendarIcon, ChevronLeft, ChevronRight, CheckCircle2,
-  Send, Mic, ShieldAlert, Wrench, Radio, CreditCard, ScanLine, RotateCcw, Shirt, Package, Sparkles
+  Send, Mic, ShieldAlert, Wrench, Radio, CreditCard, ScanLine, RotateCcw, Shirt, Package, Sparkles, X, Info
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
@@ -141,6 +141,69 @@ const StaffDashboard = () => {
   const [leaveSubmitting, setLeaveSubmitting] = useState(false);
   const [leaveSuccess, setLeaveSuccess] = useState(false);
 
+  const [directAssignments, setDirectAssignments] = useState([]);
+  const [showUrgentModal, setShowUrgentModal] = useState(false);
+  const [proofPhotos, setProofPhotos] = useState({});
+  const [completingAssignmentId, setCompletingAssignmentId] = useState(null);
+
+  const fetchAssignments = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch('http://localhost:5001/api/staff-ops/assignments', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        // Filter to only assignments where staffId matches current user
+        const myAssignments = data.filter(a => a.staffId?._id === user._id || a.staffId === user._id);
+        setDirectAssignments(myAssignments);
+      }
+    } catch (err) {
+      console.error("Error fetching assignments:", err);
+    }
+  };
+
+  const handleCompleteAssignment = async (id) => {
+    setCompletingAssignmentId(id);
+    try {
+      const token = localStorage.getItem('token');
+      let proofPhotoUrl = null;
+
+      if (proofPhotos[id]) {
+        const formData = new FormData();
+        formData.append('file', proofPhotos[id]);
+        const uploadRes = await fetch('http://localhost:5001/api/upload', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` },
+          body: formData
+        });
+        if (uploadRes.ok) {
+          const uploadData = await uploadRes.json();
+          proofPhotoUrl = uploadData.url;
+        }
+      }
+
+      await fetch(`http://localhost:5001/api/staff-ops/assignments/${id}`, {
+        method: 'PUT',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}` 
+        },
+        body: JSON.stringify({ routeStatus: 'Completed', completedStops: 1, proofPhotoUrl })
+      });
+      fetchAssignments(); // Refresh
+      
+      // Cleanup state
+      const newPhotos = { ...proofPhotos };
+      delete newPhotos[id];
+      setProofPhotos(newPhotos);
+    } catch (err) {
+      console.error("Error completing assignment:", err);
+    } finally {
+      setCompletingAssignmentId(null);
+    }
+  };
+
   const fetchReports = async () => {
     try {
       const token = localStorage.getItem('token');
@@ -261,6 +324,7 @@ const StaffDashboard = () => {
     };
     fetchBins();
     fetchReports();
+    fetchAssignments();
   }, []);
 
   // Calculate dynamic stats from DB
@@ -278,6 +342,7 @@ const StaffDashboard = () => {
 
   const menuItems = [
     { name: 'Dashboard', icon: LayoutDashboard },
+    { name: 'Completed Tasks', icon: CheckCircle },
     { name: 'Smart Bins', icon: Map },
     { name: 'AI Optimizer', icon: Sparkles },
     { name: 'Reports', icon: FileText },
@@ -430,6 +495,119 @@ const StaffDashboard = () => {
           </div>
         </header>
 
+        {/* Global Assignment Alert */}
+        {directAssignments.filter(a => a.routeStatus !== 'Completed').length > 0 && (
+          <div className="mb-6 bg-red-600 text-white rounded-2xl shadow-lg border-2 border-red-400 p-6 animate-pulse relative overflow-hidden">
+            <div className="absolute -right-10 -top-10 w-32 h-32 bg-red-500 rounded-full blur-2xl opacity-50"></div>
+            <div className="flex flex-col md:flex-row items-center justify-between relative z-10">
+              <div className="flex items-center mb-4 md:mb-0">
+                <div className="h-12 w-12 bg-white/20 rounded-xl flex items-center justify-center mr-4">
+                  <AlertTriangle className="h-6 w-6 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black tracking-tight mb-1">URGENT: DISPATCH RECEIVED</h3>
+                  <p className="text-red-100 font-medium text-sm">
+                    Admin has manually assigned you {directAssignments.filter(a => a.routeStatus !== 'Completed').length} urgent route(s).
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowUrgentModal(true)}
+                className="bg-white text-red-600 px-6 py-3 rounded-xl font-black text-sm uppercase tracking-widest shadow-md hover:bg-red-50 hover:scale-105 transition-all"
+              >
+                View & Complete Task
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* URGENT TASK MODAL */}
+        {showUrgentModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm animate-fade-in">
+            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden border border-gray-100">
+              <div className="bg-red-600 p-6 flex justify-between items-center text-white">
+                <div className="flex items-center">
+                  <AlertTriangle className="h-6 w-6 mr-3" />
+                  <h3 className="text-xl font-black tracking-widest uppercase">Urgent Dispatches</h3>
+                </div>
+                <button 
+                  onClick={() => setShowUrgentModal(false)}
+                  className="bg-red-500/50 hover:bg-red-500 rounded-full p-2 transition-colors"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              
+              <div className="p-6 max-h-[60vh] overflow-y-auto bg-gray-50 space-y-4">
+                {directAssignments.filter(a => a.routeStatus !== 'Completed').map(assign => (
+                  <div key={assign._id} className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                    <div className="flex justify-between items-start mb-4">
+                      <div>
+                        <span className="text-[10px] font-black bg-red-100 text-red-700 px-2 py-0.5 rounded uppercase tracking-wider mb-2 inline-block">Priority Assignment</span>
+                        <h4 className="text-lg font-black text-gray-900 leading-tight">{assign.zone}</h4>
+                        <p className="text-xs font-medium text-gray-500 mt-1">Assigned on: {new Date(assign.assignedDate || Date.now()).toLocaleString()}</p>
+                      </div>
+                      <div className="bg-amber-100 text-amber-700 p-2 rounded-xl flex items-center justify-center">
+                        <MapPin className="h-5 w-5" />
+                      </div>
+                    </div>
+                    
+                    <div className="bg-gray-50 p-3 rounded-xl mb-4 text-sm font-medium text-gray-600 border border-gray-100 flex items-center">
+                      <Info className="h-4 w-4 mr-2 text-gray-400" /> Admin requested immediate clearance for this location.
+                    </div>
+
+                    {/* Proof Upload Area */}
+                    <div className="mb-4">
+                      <label className="block text-xs font-bold text-gray-700 mb-2 uppercase tracking-wide">Upload Proof (Optional)</label>
+                      <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-gray-300 border-dashed rounded-xl cursor-pointer bg-gray-50 hover:bg-gray-100 transition-colors">
+                        <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                          <Camera className="w-6 h-6 mb-1 text-gray-400" />
+                          <p className="text-xs font-medium text-gray-500 text-center px-4">
+                            {proofPhotos[assign._id] ? proofPhotos[assign._id].name : "Tap to upload photo of empty bin"}
+                          </p>
+                        </div>
+                        <input type="file" className="hidden" accept="image/*" onChange={(e) => {
+                          if (e.target.files[0]) {
+                            setProofPhotos(prev => ({ ...prev, [assign._id]: e.target.files[0] }));
+                          }
+                        }} />
+                      </label>
+                    </div>
+
+                    <div className="flex space-x-3 mt-2">
+                      <button 
+                        onClick={() => {
+                          setShowUrgentModal(false);
+                          setActiveMenu('Smart Bins');
+                        }}
+                        className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-3 rounded-xl text-xs transition-colors shadow-sm"
+                      >
+                        Find on Map
+                      </button>
+                      <button 
+                        onClick={async () => {
+                          await handleCompleteAssignment(assign._id);
+                          if (directAssignments.filter(a => a.routeStatus !== 'Completed').length <= 1) {
+                            setShowUrgentModal(false);
+                          }
+                        }}
+                        disabled={completingAssignmentId === assign._id}
+                        className="flex-1 bg-brand-green hover:bg-emerald-600 text-white font-bold py-3 rounded-xl text-xs transition-colors flex items-center justify-center shadow-md disabled:opacity-70"
+                      >
+                        {completingAssignmentId === assign._id ? (
+                          <span className="flex items-center"><RotateCcw className="w-4 h-4 mr-1.5 animate-spin" /> Completing...</span>
+                        ) : (
+                          <span className="flex items-center"><CheckCircle2 className="w-4 h-4 mr-1.5" /> Mark Completed</span>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
         {activeMenu === 'Smart Bins' ? (
           <div className="flex flex-col lg:flex-row gap-6 h-[calc(100vh-160px)]">
             {/* Left: Interactive Map */}
@@ -578,10 +756,34 @@ const StaffDashboard = () => {
             {/* Right: Route Task List */}
             <div className="w-full lg:w-1/3 bg-white rounded-2xl shadow-sm border border-gray-100 flex flex-col h-full overflow-hidden">
               <div className="p-6 border-b border-gray-100 bg-white z-10 shrink-0">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-lg font-bold text-gray-800">Optimized List</h3>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-bold text-gray-800">Optimized List & Tasks</h3>
                   {isRouteOptimized && <span className="bg-emerald-100 text-emerald-700 text-[10px] font-black uppercase px-2 py-1 rounded border border-emerald-200 flex items-center"><Sparkles className="w-3 h-3 mr-1" /> AI Route Set</span>}
                 </div>
+
+                {/* Direct Assignments Widget */}
+                {directAssignments.filter(a => a.routeStatus !== 'Completed').length > 0 && (
+                  <div className="mb-6 space-y-3">
+                    <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center"><Route className="w-3 h-3 mr-1 text-red-500"/> Direct Dispatches</h4>
+                    {directAssignments.filter(a => a.routeStatus !== 'Completed').map(assign => (
+                      <div key={assign._id} className="bg-red-50 border border-red-100 p-4 rounded-xl flex flex-col gap-3 shadow-sm">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <span className="text-[10px] font-black bg-red-100 text-red-700 px-2 py-0.5 rounded uppercase tracking-wider mb-1 inline-block">Urgent Task</span>
+                            <p className="text-sm font-bold text-gray-900 leading-tight">{assign.zone}</p>
+                          </div>
+                        </div>
+                        <button 
+                          onClick={() => handleCompleteAssignment(assign._id)}
+                          className="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-2 rounded-lg text-xs transition-colors flex items-center justify-center shadow-sm">
+                          <CheckCircle2 className="w-4 h-4 mr-1.5" /> Mark as Completed
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                
+                <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-3 flex items-center">Standard Route</h4>
                 
                 {!isRouteOptimized ? (
                   <button 
@@ -647,6 +849,68 @@ const StaffDashboard = () => {
                   </div>
                 ))}
               </div>
+            </div>
+          </div>
+        ) : activeMenu === 'Completed Tasks' ? (
+          <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden min-h-[500px]">
+            <div className="p-8 border-b border-gray-100 bg-gray-50/50">
+              <h2 className="text-2xl font-black text-gray-900 flex items-center">
+                <CheckCircle className="h-6 w-6 mr-2 text-brand-green" /> 
+                Task History
+              </h2>
+              <p className="text-gray-500 font-medium text-sm mt-1">Review your completed route assignments and submitted proofs.</p>
+            </div>
+            
+            <div className="p-8 bg-gray-50/20">
+              {directAssignments.filter(a => a.routeStatus === 'Completed').length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 text-center">
+                  <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                    <CheckCircle2 className="h-8 w-8 text-gray-300" />
+                  </div>
+                  <h3 className="text-xl font-bold text-gray-800 mb-2">No completed tasks yet.</h3>
+                  <p className="text-gray-500 font-medium">Any urgent dispatches you complete will appear here.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {directAssignments.filter(a => a.routeStatus === 'Completed').map(task => (
+                    <div key={task._id} className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm hover:shadow-lg transition-all group">
+                      {task.proofPhotoUrl ? (
+                        <div className="h-48 w-full overflow-hidden relative bg-gray-100">
+                          <img 
+                            src={`http://localhost:5001${task.proofPhotoUrl}`} 
+                            alt="Proof of clearance" 
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                          />
+                          <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-sm text-brand-green text-[10px] font-black uppercase px-2 py-1 rounded shadow-sm flex items-center">
+                            <CheckCircle2 className="w-3 h-3 mr-1" /> Verified Proof
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="h-32 w-full bg-gradient-to-br from-emerald-50 to-green-100 flex flex-col items-center justify-center border-b border-gray-100">
+                          <CheckCircle className="h-8 w-8 text-emerald-300 mb-2" />
+                          <span className="text-xs font-bold text-emerald-600 uppercase tracking-widest">Completed</span>
+                        </div>
+                      )}
+                      
+                      <div className="p-6">
+                        <div className="flex justify-between items-start mb-3">
+                          <h4 className="text-lg font-black text-gray-900 leading-tight">{task.zone}</h4>
+                        </div>
+                        <div className="space-y-3">
+                          <div className="flex items-center text-sm font-medium text-gray-500">
+                            <Calendar className="w-4 h-4 mr-2 text-gray-400" />
+                            Completed: {new Date(task.updatedAt || task.assignedDate).toLocaleDateString()}
+                          </div>
+                          <div className="flex items-center text-sm font-medium text-gray-500">
+                            <Clock className="w-4 h-4 mr-2 text-gray-400" />
+                            {new Date(task.updatedAt || task.assignedDate).toLocaleTimeString()}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         ) : activeMenu === 'Salary & Payroll' ? (

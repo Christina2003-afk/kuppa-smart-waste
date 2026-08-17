@@ -27,8 +27,8 @@ exports.createAssignment = async (req, res) => {
 exports.updateAssignmentStatus = async (req, res) => {
   try {
     const { id } = req.params;
-    const { routeStatus, completedStops } = req.body;
-    const updated = await Assignment.findByIdAndUpdate(id, { routeStatus, completedStops }, { new: true });
+    const { routeStatus, completedStops, proofPhotoUrl } = req.body;
+    const updated = await Assignment.findByIdAndUpdate(id, { routeStatus, completedStops, proofPhotoUrl }, { new: true });
     res.json(updated);
   } catch (error) {
     res.status(500).json({ message: 'Server Error', error });
